@@ -31,19 +31,31 @@ WHERE orders.OrderDate BETWEEN '1995-05-01 00:00:00' AND '1995-05-30 00:00:00'
 GROUP BY orders.OrderDate
 ";
 
-$productsByCategory = "SELECT products.ProductID, products.CategoryID, categories.CategoryName, sum(order_details.Quantity) as totalOrder FROM order_details
+$productsByCategory = "SELECT products.ProductID, orders.OrderDate, products.CategoryID, categories.CategoryName, sum(order_details.Quantity) as totalOrder FROM order_details
 INNER JOIN products
 on order_details.ProductID=products.ProductID
 INNER JOIN categories
 on products.CategoryID=categories.CategoryID
+INNER JOIN orders
+on orders.OrderID=order_details.OrderID
+WHERE orders.OrderDate BETWEEN '1995-05-01 00:00:00' AND '1995-05-30 00:00:00'
 GROUP BY categories.CategoryName";
+
+$customerOrder = "SELECT customers.CustomerID, sum(order_details.UnitPrice) as Sales from order_details
+INNER JOIN orders on orders.OrderID=order_details.OrderID
+INNER JOIN customers on orders.CustomerID=customers.CustomerID
+WHERE orders.OrderDate BETWEEN '1995-05-01 00:00:00' AND '1995-05-30 00:00:00'
+GROUP BY customers.CustomerID
+LIMIT 7"; 
 
 
 // $totalSaleByDay = $conn->query($saleByDay);
 $totalSaleByDay = mysqli_query($conn, $saleByDay);
 $totalOrder = mysqli_query($conn, $orders);
 $percentageCategory = mysqli_query($conn, $productsByCategory);
+$orderByCustomer = mysqli_query($conn, $customerOrder);
 
+// top of dashboard
 $totalSale = 0;
 $totalQuantity = 0;
 $totalDiscount = 0;
@@ -53,7 +65,30 @@ while($row = mysqli_fetch_assoc($totalOrder)) {
     $totalQuantity = $row['Quantity'];
     $totalDiscount = $row['Discount'];
 }
+
+// total sale per day
+$totalSalesDay = [];
+while($row = mysqli_fetch_assoc($totalSaleByDay)) {
+  // echo explode(" ",$row);
+  $day = $row['byDay'];
+  $price = $row['UnitPrice'];
+  $totalSalesDay[$day] = $price; 
+}
+// sale by product categories
+$categoryName = [];
+$categorySales = [];
+while($row = mysqli_fetch_assoc($percentageCategory)) {
+  $categoryName[$row['CategoryID']] =  $row['CategoryName'];
+  $categorySales[$row['CategoryID']] = $row['totalOrder'];
+}  
+
+$customerOrder = [];
+while($row = mysqli_fetch_assoc($orderByCustomer)) {
+  // echo $row['Sales'].", ";
+  $customerOrder[$row['CustomerID']] = $row['Sales'];
+}
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">
@@ -130,24 +165,18 @@ while($row = mysqli_fetch_assoc($totalOrder)) {
         <canvas id="categorySales"></canvas>
       </div>
     </div>
+    <div class="col-6">
+      <div>
+        <canvas id="customerChart"></canvas>
+      </div>
+    </div>
   </div>
 </div>
 
 <?php 
-$totalSalesDay = [];
-  while($row = mysqli_fetch_assoc($totalSaleByDay)) {
-    // echo explode(" ",$row);
-    $day = $row['byDay'];
-    $price = $row['UnitPrice'];
-    $totalSalesDay[$day] = $price; 
-  }
 
-  $categoryName = [];
-  $categorySales = [];
-  while($row = mysqli_fetch_assoc($percentageCategory)) {
-    $categoryName[$row['CategoryID']] =  $row['CategoryName'];
-    $categorySales[$row['CategoryID']] = $row['totalOrder'];
-  }  
+
+ 
 ?>
 
 <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
@@ -165,13 +194,11 @@ $totalSalesDay = [];
         label: 'Total Sale Per Day',
         backgroundColor: 'rgb(255, 99, 132)',
         borderColor: 'rgb(255, 99, 132)',
-        data: [
-          <?php 
+        data: [<?php 
             for($i=0; $i < 30; $i++) { 
               echo str_replace('.', '',$totalSalesDay[$i+1]).',';
             }
-          ?>
-          ]
+        ?>]
       }]
     };
     const configBar = {
@@ -219,11 +246,59 @@ $totalSalesDay = [];
       document.getElementById('categorySales'),
       configPie
     )
+
+    const dataCus = {
+      labels: [<?php
+      foreach($customerOrder as $key=>$val) {
+        echo "'".$key."'".',';
+      }
+    ?>],
+      datasets: [{
+        axis: 'y',
+        label: 'Sales By Customers',
+        data: [<?php
+        foreach($customerOrder as $val) {
+          echo "'".str_replace('.', '', $val)."'".',';
+        }
+        ?> ],
+        fill: false,
+        backgroundColor: [
+          'rgba(255, 99, 132, 0.2)',
+          'rgba(255, 159, 64, 0.2)',
+          'rgba(255, 205, 86, 0.2)',
+          'rgba(75, 192, 192, 0.2)',
+          'rgba(54, 162, 235, 0.2)',
+          'rgba(153, 102, 255, 0.2)',
+          'rgba(201, 203, 207, 0.2)'
+        ],
+        borderColor: [
+          'rgb(255, 99, 132)',
+          'rgb(255, 159, 64)',
+          'rgb(255, 205, 86)',
+          'rgb(75, 192, 192)',
+          'rgb(54, 162, 235)',
+          'rgb(153, 102, 255)',
+          'rgb(201, 203, 207)'
+        ],
+        borderWidth: 1
+      }]
+    };
+    const configCustomer = {
+      type: 'bar',
+      data: dataCus,
+      options: {
+        indexAxis: 'y',
+      }
+    };
+      var customerChart = new Chart(
+      document.getElementById('customerChart'),
+      configCustomer
+    )
 </script>
 </body>
 </html>
 <?php
-mysqli_close($con);
+mysqli_close($conn);
 ?>
 
 
